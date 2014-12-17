@@ -164,6 +164,21 @@ void l2r_lr_fun::Xv(double *v, double *Xv)
 {
 	int i;
 	int l=prob->l;
+
+#ifdef _DENSE_REP
+        int w_size = get_nr_variable();
+	double **x = prob->x;
+	
+	for(i=0;i<l;i++)
+	{
+		double *s=x[i];
+		Xv[i]=0;
+		for(int j=0;j<w_size;j++)
+		{
+                        Xv[i]+=v[j]*s[j];
+		}
+	}
+#else
 	feature_node **x=prob->x;
 
 	for(i=0;i<l;i++)
@@ -176,6 +191,7 @@ void l2r_lr_fun::Xv(double *v, double *Xv)
 			s++;
 		}
 	}
+#endif
 }
 
 void l2r_lr_fun::XTv(double *v, double *XTv)
@@ -183,6 +199,22 @@ void l2r_lr_fun::XTv(double *v, double *XTv)
 	int i;
 	int l=prob->l;
 	int w_size=get_nr_variable();
+
+#ifdef _DENSE_REP
+ 	double **x = prob->x;
+
+	for(i=0;i<w_size;i++)
+		XTv[i]=0;
+
+	for(i=0;i<l;i++)
+	{
+		double *s=x[i];
+		for(int j=0;j<w_size;j++)
+		{
+		        XTv[j]+=v[i]*s[j];
+		}
+	}
+#else
 	feature_node **x=prob->x;
 
 	for(i=0;i<w_size;i++)
@@ -196,6 +228,7 @@ void l2r_lr_fun::XTv(double *v, double *XTv)
 			s++;
 		}
 	}
+#endif
 }
 
 class l2r_l2_svc_fun : public function
@@ -324,6 +357,24 @@ void l2r_l2_svc_fun::Xv(double *v, double *Xv)
 {
 	int i;
 	int l=prob->l;
+
+#ifdef _DENSE_REP
+	int j,w_size = get_nr_variable();
+	double **x = prob->x;
+
+
+	for(i=0;i<l;i++)
+	{
+		double *s=x[i];
+		Xv[i]=0;
+		for(j=0;j<w_size;j++)
+		{
+			Xv[i]+=v[j]*s[j];
+
+		}
+	}
+
+#else
 	feature_node **x=prob->x;
 
 	for(i=0;i<l;i++)
@@ -336,11 +387,27 @@ void l2r_l2_svc_fun::Xv(double *v, double *Xv)
 			s++;
 		}
 	}
+#endif
 }
 
 void l2r_l2_svc_fun::subXv(double *v, double *Xv)
 {
 	int i;
+
+#ifdef _DENSE_REP
+	int j,w_size = get_nr_variable();
+	double **x=prob->x;
+
+	for(i=0;i<sizeI;i++)
+	{
+		double *s=x[I[i]];
+		Xv[i]=0;
+		for(j=0;j<w_size;j++)
+		{
+		        Xv[i]+=v[j]*s[j];
+		}
+	}
+#else
 	feature_node **x=prob->x;
 
 	for(i=0;i<sizeI;i++)
@@ -353,12 +420,30 @@ void l2r_l2_svc_fun::subXv(double *v, double *Xv)
 			s++;
 		}
 	}
+#endif
 }
 
 void l2r_l2_svc_fun::subXTv(double *v, double *XTv)
 {
 	int i;
 	int w_size=get_nr_variable();
+
+#ifdef _DENSE_REP
+	double **x=prob->x;
+	int j;
+
+	for(i=0;i<w_size;i++)
+		XTv[i]=0;
+	for(i=0;i<sizeI;i++)
+	{
+		double *s=x[I[i]];
+		for(j=0;j<w_size;j++)
+		{
+			XTv[j]+=v[i]*s[j];
+		}
+	}
+	
+#else
 	feature_node **x=prob->x;
 
 	for(i=0;i<w_size;i++)
@@ -372,6 +457,7 @@ void l2r_l2_svc_fun::subXTv(double *v, double *XTv)
 			s++;
 		}
 	}
+#endif
 }
 
 // A coordinate descent algorithm for 
@@ -474,6 +560,10 @@ bool Solver_MCSVM_CS::be_shrunk(int m, int yi, double alpha_i, double minG)
 void Solver_MCSVM_CS::Solve(double *w)
 {
 	int i, m, s;
+
+#ifdef _DENSE_REP
+	int j;
+#endif
 	int iter = 0;
 	double *alpha =  new double[l*nr_class];
 	double *alpha_new = new double[nr_class];
@@ -496,6 +586,15 @@ void Solver_MCSVM_CS::Solve(double *w)
 	{
 		for(m=0;m<nr_class;m++)
 			alpha_index[i*nr_class+m] = m;
+#ifdef _DENSE_REP
+		double *xi = prob->x[i];
+
+		QD[i] = 0;
+		for(j = 0; j < w_size; j++)
+		{
+                        QD[i] += xi[j]*xi[j];
+		}  
+#else
 		feature_node *xi = prob->x[i];
 		QD[i] = 0;
 		while(xi->index != -1)
@@ -503,6 +602,7 @@ void Solver_MCSVM_CS::Solve(double *w)
 			QD[i] += (xi->value)*(xi->value);
 			xi++;
 		}
+#endif
 		active_size_i[i] = nr_class;
 		y_index[i] = prob->y[i];
 		index[i] = i;
@@ -530,6 +630,16 @@ void Solver_MCSVM_CS::Solve(double *w)
 				if(y_index[i] < active_size_i[i])
 					G[y_index[i]] = 0;
 
+#ifdef _DENSE_REP
+				double *xi = prob->x[i];
+				for(j=0; j < w_size ;j++)
+				{
+				        double *w_i = &w[j*nr_class];
+					for(m=0;m<active_size_i[i];m++)
+						G[m] += w_i[alpha_index_i[m]]*(xi[j]);
+				}
+
+#else
 				feature_node *xi = prob->x[i];
 				while(xi->index!= -1)
 				{
@@ -538,7 +648,7 @@ void Solver_MCSVM_CS::Solve(double *w)
 						G[m] += w_i[alpha_index_i[m]]*(xi->value);
 					xi++;
 				}
-
+#endif
 				double minG = INF;
 				double maxG = -INF;
 				for(m=0;m<active_size_i[i];m++)
@@ -605,6 +715,15 @@ void Solver_MCSVM_CS::Solve(double *w)
 					}
 				}
 
+#ifdef _DENSE_REP
+				xi = prob->x[i];
+				for(j = 0; j < w_size; j++)
+				{
+					double *w_i = &w[(j)*nr_class];
+					for(m=0;m<nz_d;m++)
+						w_i[d_ind[m]] += d_val[m]*xi[j];
+				}
+#else
 				xi = prob->x[i];
 				while(xi->index != -1)
 				{
@@ -613,6 +732,7 @@ void Solver_MCSVM_CS::Solve(double *w)
 						w_i[d_ind[m]] += d_val[m]*xi->value;
 					xi++;
 				}
+#endif
 			}
 		}
 
@@ -703,6 +823,10 @@ static void solve_l2r_l1l2_svc(
 	int l = prob->l;
 	int w_size = prob->n;
 	int i, s, iter = 0;
+
+#ifdef _DENSE_REP
+	int j;
+#endif
 	double C, d, G;
 	double *QD = new double[l];
 	int max_iter = 1000;
@@ -742,12 +866,20 @@ static void solve_l2r_l1l2_svc(
 			QD[i] = diag_n;
 		}
 
+#ifdef _DENSE_REP
+		double *xi = prob->x[i];
+		for(j = 0; j < w_size ; j++)
+		{
+		        QD[i] += xi[j]*xi[j];
+		}
+#else
 		feature_node *xi = prob->x[i];
 		while (xi->index != -1)
 		{
 			QD[i] += (xi->value)*(xi->value);
 			xi++;
 		}
+#endif
 		index[i] = i;
 	}
 
@@ -755,7 +887,7 @@ static void solve_l2r_l1l2_svc(
 	{
 		PGmax_new = -INF;
 		PGmin_new = INF;
-
+		
 		for (i=0; i<active_size; i++)
 		{
 			int j = i+rand()%(active_size-i);
@@ -768,12 +900,20 @@ static void solve_l2r_l1l2_svc(
 			G = 0;
 			schar yi = y[i];
 
+#ifdef _DENSE_REP
+			double *xi = prob->x[i]; 
+        		for(j = 0; j < w_size ; j++)
+			{
+				G += w[j]*xi[j];
+			}
+#else
 			feature_node *xi = prob->x[i];
 			while(xi->index!= -1)
 			{
 				G += w[xi->index-1]*(xi->value);
 				xi++;
 			}
+#endif
 			G = G*yi-1;
 
 			if(yi == 1)
@@ -823,12 +963,20 @@ static void solve_l2r_l1l2_svc(
 				double alpha_old = alpha[i];
 				alpha[i] = min(max(alpha[i] - G/QD[i], 0.0), C);
 				d = (alpha[i] - alpha_old)*yi;
+#ifdef _DENSE_REP
+				xi = prob->x[i];
+				for(j = 0; j < w_size; j++)
+				{
+					w[j] += d*xi[j];
+				}
+#else
 				xi = prob->x[i];
 				while (xi->index != -1)
 				{
 					w[xi->index-1] += d*xi->value;
 					xi++;
 				}
+#endif	
 			}
 		}
 
@@ -903,6 +1051,10 @@ static void solve_l1r_l2_svc(
 	int l = prob_col->l;
 	int w_size = prob_col->n;
 	int j, s, iter = 0;
+
+#ifdef _DENSE_REP
+	int k;
+#endif
 	int max_iter = 1000;
 	int active_size = w_size;
 	int max_num_linesearch = 20;
@@ -920,7 +1072,12 @@ static void solve_l1r_l2_svc(
 	schar *y = new schar[l];
 	double *b = new double[l]; // b = 1-ywTx
 	double *xj_sq = new double[w_size];
+
+#ifdef _DENSE_REP
+	double *x;
+#else
 	feature_node *x;
+#endif
 
 	// To support weights for instances,
 	// replace C[y[i]] with C[i].
@@ -939,6 +1096,16 @@ static void solve_l1r_l2_svc(
 		w[j] = 0;
 		index[j] = j;
 		xj_sq[j] = 0;
+
+#ifdef _DENSE_REP
+		x = prob_col->x[j]; 
+		for(k = 0; k < l; k++)
+		{
+			double val = x[k];
+			x[k] *= prob_col->y[k]; // x->value stores yi*xij
+			xj_sq[j] += C[y[k]]*val*val;
+		}
+#else
 		x = prob_col->x[j];
 		while(x->index != -1)
 		{
@@ -948,6 +1115,7 @@ static void solve_l1r_l2_svc(
 			xj_sq[j] += C[y[ind]]*val*val;
 			x++;
 		}
+#endif
 	}
 
 	while(iter < max_iter)
@@ -966,6 +1134,19 @@ static void solve_l1r_l2_svc(
 			G_loss = 0;
 			H = 0;
 
+#ifdef _DENSE_REP
+			x = prob_col->x[j];
+			for(k = 0; k < l ; k++)
+			{
+				if(b[k] > 0)
+				{
+					double val = x[k];
+					double tmp = C[y[k]]*val;
+					G_loss -= tmp*b[k];
+					H += tmp*val;
+				}
+			}
+#else
 			x = prob_col->x[j];
 			while(x->index != -1)
 			{
@@ -979,6 +1160,7 @@ static void solve_l1r_l2_svc(
 				}
 				x++;
 			}
+#endif
 			G_loss *= 2;
 
 			G = G_loss;
@@ -1031,12 +1213,21 @@ static void solve_l1r_l2_svc(
 				appxcond = xj_sq[j]*d*d + G_loss*d + cond;
 				if(appxcond <= 0)
 				{
+
+#ifdef _DENSE_REP
+					x = prob_col->x[j];
+					for(k = 0; k < l; k++)
+					{
+         	                                b[k] += d_diff*x[k];
+					}
+#else
 					x = prob_col->x[j];
 					while(x->index != -1)
 					{
 						b[x->index] += d_diff*x->value;
 						x++;
 					}
+#endif
 					break;
 				}
 
@@ -1044,6 +1235,30 @@ static void solve_l1r_l2_svc(
 				{
 					loss_old = 0;
 					loss_new = 0;
+#ifdef _DENSE_REP
+					x = prob_col->x[j];
+					for(k = 0; k < l; k++)
+					{
+						if(b[k] > 0)
+							loss_old += C[y[k]]*b[k]*b[k];
+						double b_new = b[k] + d_diff*x[k];
+						b[k] = b_new;
+						if(b_new > 0)
+							loss_new += C[y[k]]*b_new*b_new;
+					}
+				}
+				else
+				{
+					loss_new = 0;
+					x = prob_col->x[j];
+					for(k = 0; k < l; k++)
+					{
+						double b_new = b[k] + d_diff*x[k];
+						b[k] = b_new;
+						if(b_new > 0)
+							loss_new += C[y[k]]*b_new*b_new;
+					}
+#else
 					x = prob_col->x[j];
 					while(x->index != -1)
 					{
@@ -1070,6 +1285,7 @@ static void solve_l1r_l2_svc(
 							loss_new += C[y[ind]]*b_new*b_new;
 						x++;
 					}
+#endif
 				}
 
 				cond = cond + loss_new - loss_old;
@@ -1095,12 +1311,20 @@ static void solve_l1r_l2_svc(
 				for(int i=0; i<w_size; i++)
 				{
 					if(w[i]==0) continue;
+#ifdef _DENSE_REP
+					x = prob_col->x[i];
+					for(int pp = 0; pp < l; pp++)
+					{
+						b[pp] -= w[i]*x[pp];
+					}
+#else
 					x = prob_col->x[i];
 					while(x->index != -1)
 					{
 						b[x->index] -= w[i]*x->value;
 						x++;
 					}
+#endif
 				}
 			}
 		}
@@ -1137,12 +1361,20 @@ static void solve_l1r_l2_svc(
 	int nnz = 0;
 	for(j=0; j<w_size; j++)
 	{
+#if _DENSE_REP
+		x = prob_col->x[j];
+		for(int k = 0; k < l; k++)
+		{
+			x[k] *= prob_col->y[k]; // restore x->value
+		}
+#else
 		x = prob_col->x[j];
 		while(x->index != -1)
 		{
 			x->value *= prob_col->y[x->index]; // restore x->value
 			x++;
 		}
+#endif
 		if(w[j] != 0)
 		{
 			v += fabs(w[j]);
@@ -1180,6 +1412,10 @@ static void solve_l1r_lr(
 	int l = prob_col->l;
 	int w_size = prob_col->n;
 	int j, s, iter = 0;
+
+#ifdef _DENSE_REP
+	int k;
+#endif
 	int max_iter = 1000;
 	int active_size = w_size;
 	int max_num_linesearch = 20;
@@ -1202,8 +1438,12 @@ static void solve_l1r_lr(
 	double *C_sum = new double[w_size];
 	double *xjneg_sum = new double[w_size];
 	double *xjpos_sum = new double[w_size];
-	feature_node *x;
 
+#ifdef _DENSE_REP
+	double *x;
+#else
+	feature_node *x;
+#endif
 	// To support weights for instances,
 	// replace C[y[i]] with C[i].
 	double C[2] = {Cn,Cp};
@@ -1225,6 +1465,20 @@ static void solve_l1r_lr(
 		xjneg_sum[j] = 0;
 		xjpos_sum[j] = 0;
 		x = prob_col->x[j];
+
+#ifdef _DENSE_REP
+		for(k = 0 ; k < l; k++)
+		{
+			double val = x[k];
+			x_min = min(x_min, val);
+			xj_max[j] = max(xj_max[j], val);
+			C_sum[j] += C[y[k]];
+			if(y[k] == 0)
+				xjneg_sum[j] += C[y[k]]*val;
+			else
+				xjpos_sum[j] += C[y[k]]*val;
+		}
+#else
 		while(x->index != -1)
 		{
 			int ind = x->index;
@@ -1238,6 +1492,7 @@ static void solve_l1r_lr(
 				xjpos_sum[j] += C[y[ind]]*val;
 			x++;
 		}
+#endif
 	}
 
 	while(iter < max_iter)
@@ -1258,6 +1513,18 @@ static void solve_l1r_lr(
 			H = 0;
 
 			x = prob_col->x[j];
+#ifdef _DENSE_REP
+			for(k = 0; k < l; k++)
+			{
+				double exp_wTxind = exp_wTx[k];
+				double tmp1 = x[k]/(1+exp_wTxind);
+				double tmp2 = C[y[k]]*tmp1;
+				double tmp3 = tmp2*exp_wTxind;
+				sum2 += tmp2;
+				sum1 += tmp3;
+				H += tmp1*tmp3;
+			}
+#else
 			while(x->index != -1)
 			{
 				int ind = x->index;
@@ -1270,7 +1537,7 @@ static void solve_l1r_lr(
 				H += tmp1*tmp3;
 				x++;
 			}
-
+#endif
 			G = -sum2 + xjneg_sum[j];
 
 			double Gp = G+1;
@@ -1323,12 +1590,20 @@ static void solve_l1r_lr(
 					appxcond2 = log(1+sum2*(1/tmp-1)/xj_max[j]/C_sum[j])*C_sum[j] + cond + d*xjneg_sum[j];
 					if(min(appxcond1,appxcond2) <= 0)
 					{
+#ifdef _DENSE_REP
+						x = prob_col->x[j];
+						for(k = 0; k < l; k++)
+						{
+							exp_wTx[k] *= exp(d*x[k]);
+						}
+#else
 						x = prob_col->x[j];
 						while(x->index != -1)
 						{
 							exp_wTx[x->index] *= exp(d*x->value);
 							x++;
 						}
+#endif
 						break;
 					}
 				}
@@ -1337,6 +1612,15 @@ static void solve_l1r_lr(
 
 				int i = 0;
 				x = prob_col->x[j];
+#ifdef _DENSE_REP
+				for(k = 0; k < l; k++)
+				{
+					double exp_dx = exp(d*x[k]);
+					exp_wTx_new[i] = exp_wTx[k]*exp_dx;
+					cond += C[y[k]]*log((1+exp_wTx_new[i])/(exp_dx+exp_wTx_new[i]));
+					i++;
+				}
+#else
 				while(x->index != -1)
 				{
 					int ind = x->index;
@@ -1345,17 +1629,25 @@ static void solve_l1r_lr(
 					cond += C[y[ind]]*log((1+exp_wTx_new[i])/(exp_dx+exp_wTx_new[i]));
 					x++; i++;
 				}
-
+#endif
 				if(cond <= 0)
 				{
 					int i = 0;
 					x = prob_col->x[j];
+#ifdef _DENSE_REP
+					for(k = 0; k < l; k++)
+					{
+						exp_wTx[k] = exp_wTx_new[i];
+						i++;
+					}
+#else
 					while(x->index != -1)
 					{
 						int ind = x->index;
 						exp_wTx[ind] = exp_wTx_new[i];
 						x++; i++;
 					}
+#endif
 					break;
 				}
 				else
@@ -1378,11 +1670,18 @@ static void solve_l1r_lr(
 				{
 					if(w[i]==0) continue;
 					x = prob_col->x[i];
+#ifdef _DENSE_REP
+					for(k = 0; k < l; k++)
+					{
+						exp_wTx[k] += w[i]*x[k];
+					}
+#else
 					while(x->index != -1)
 					{
 						exp_wTx[x->index] += w[i]*x->value;
 						x++;
 					}
+#endif
 				}
 
 				for(int i=0; i<l; i++)
@@ -1446,24 +1745,56 @@ static void solve_l1r_lr(
 }
 
 // transpose matrix X from row format to column format
+#ifdef _DENSE_REP
+static void transpose(const problem *prob, double **x_space_ret, problem *prob_col)
+#else
 static void transpose(const problem *prob, feature_node **x_space_ret, problem *prob_col)
+#endif
 {
 	int i;
 	int l = prob->l;
 	int n = prob->n;
 	int nnz = 0;
-	int *col_ptr = new int[n+1];
-	feature_node *x_space;
+
 	prob_col->l = l;
 	prob_col->n = n;
 	prob_col->y = new int[l];
+	prob_col->bias = prob->bias;
+
+#ifdef _DENSE_REP
+	double *x_space;
+	prob_col->x = new double*[n];
+#else
+	int *col_ptr = new int[n+1];
+	feature_node *x_space;
 	prob_col->x = new feature_node*[n];
+#endif
 
 	for(i=0; i<l; i++)
 		prob_col->y[i] = prob->y[i];
 
+#ifdef _DENSE_REP
+	nnz = l*n;
+	x_space = new double[nnz];
+
+	for(i=0; i<n; i++)
+		prob_col->x[i] = &x_space[i*l];
+
+	//simply transpose the data
+	for(i=0; i<l; i++)
+	{
+	  	double *x = prob->x[i];
+	        for(int j=0; j<n; j++)
+		{
+		  x_space[i + j*l] = x[j];
+		}
+	}
+	*x_space_ret = x_space;
+#else
+
 	for(i=0; i<n+1; i++)
 		col_ptr[i] = 0;
+
 	for(i=0; i<l; i++)
 	{
 		feature_node *x = prob->x[i];
@@ -1478,7 +1809,8 @@ static void transpose(const problem *prob, feature_node **x_space_ret, problem *
 		col_ptr[i] += col_ptr[i-1] + 1;
 
 	x_space = new feature_node[nnz+n];
-	for(i=0; i<n; i++)
+
+	for(i=0; i < n; i++)
 		prob_col->x[i] = &x_space[col_ptr[i]];
 
 	for(i=0; i<l; i++)
@@ -1495,10 +1827,10 @@ static void transpose(const problem *prob, feature_node **x_space_ret, problem *
 	}
 	for(i=0; i<n; i++)
 		x_space[col_ptr[i]].index = -1;
-
 	*x_space_ret = x_space;
 
 	delete [] col_ptr;
+#endif
 }
 
 // label: label name, start: begin of each class, count: #data of classes, perm: indices to the original data
@@ -1571,6 +1903,7 @@ static void train_one(const problem *prob, const parameter *param, double *w, do
 	neg = prob->l - pos;
 
 	function *fun_obj=NULL;
+	//print_prob(prob);
 	switch(param->solver_type)
 	{
 		case L2R_LR:
@@ -1584,6 +1917,7 @@ static void train_one(const problem *prob, const parameter *param, double *w, do
 		}
 		case L2R_L2LOSS_SVC:
 		{
+    		       
 			fun_obj=new l2r_l2_svc_fun(prob, Cp, Cn);
 			TRON tron_obj(fun_obj, eps*min(pos,neg)/prob->l);
 			tron_obj.set_print_string(liblinear_print_string);
@@ -1600,8 +1934,15 @@ static void train_one(const problem *prob, const parameter *param, double *w, do
 		case L1R_L2LOSS_SVC:
 		{
 			problem prob_col;
+#ifdef _DENSE_REP
+			double *x_space = NULL;
+			transpose(prob, &x_space ,&prob_col);
+			//print_prob_col(&prob_col);
+#else
 			feature_node *x_space = NULL;
 			transpose(prob, &x_space ,&prob_col);
+#endif
+
 			solve_l1r_l2_svc(&prob_col, w, eps*min(pos,neg)/prob->l, Cp, Cn);
 			delete [] prob_col.y;
 			delete [] prob_col.x;
@@ -1611,8 +1952,14 @@ static void train_one(const problem *prob, const parameter *param, double *w, do
 		case L1R_LR:
 		{
 			problem prob_col;
+#ifdef _DENSE_REP
+			double *x_space = NULL;
+			transpose(prob, &x_space ,&prob_col);
+			//print_prob_col(&prob_col);
+#else
 			feature_node *x_space = NULL;
 			transpose(prob, &x_space ,&prob_col);
+#endif
 			solve_l1r_lr(&prob_col, w, eps*min(pos,neg)/prob->l, Cp, Cn);
 			delete [] prob_col.y;
 			delete [] prob_col.x;
@@ -1673,7 +2020,12 @@ model* train(const problem *prob, const parameter *param)
 	}
 
 	// constructing the subproblem
+#ifdef _DENSE_REP
+	double **x = Malloc(double *,l);
+#else
 	feature_node **x = Malloc(feature_node *,l);
+#endif
+
 	for(i=0;i<l;i++)
 		x[i] = prob->x[perm[i]];
 
@@ -1681,8 +2033,16 @@ model* train(const problem *prob, const parameter *param)
 	problem sub_prob;
 	sub_prob.l = l;
 	sub_prob.n = n;
+	sub_prob.bias = prob->bias;
+
+#ifdef _DENSE_REP
+	sub_prob.x = Malloc(double *,sub_prob.l);
+#else
 	sub_prob.x = Malloc(feature_node *,sub_prob.l);
+#endif	
 	sub_prob.y = Malloc(int,sub_prob.l);
+
+
 
 	for(k=0; k<sub_prob.l; k++)
 		sub_prob.x[k] = x[k];
@@ -1906,10 +2266,18 @@ struct model *load_model(const char *model_file_name)
 
 	return model_;
 }
-
+#ifdef _DENSE_REP
+int predict_values(const struct model *model_, const double *x, double *dec_values)
+#else
 int predict_values(const struct model *model_, const struct feature_node *x, double *dec_values)
+#endif
 {
+
+#ifdef _DENSE_REP
+        int k;
+#else
 	int idx;
+#endif
 	int n;
 	if(model_->bias>=0)
 		n=model_->nr_feature+1;
@@ -1924,9 +2292,19 @@ int predict_values(const struct model *model_, const struct feature_node *x, dou
 	else
 		nr_w = nr_class;
 
-	const feature_node *lx=x;
+	
 	for(i=0;i<nr_w;i++)
 		dec_values[i] = 0;
+
+#ifdef _DENSE_REP
+	const double *lx = x;
+	for(k = 0; k < n; k++)
+	{
+	        for(i=0;i<nr_w;i++)
+        		  dec_values[i] += w[k*nr_w+i]*lx[k];
+	}
+#else
+	const feature_node *lx=x;
 	for(; (idx=lx->index)!=-1; lx++)
 	{
 		// the dimension of testing data may exceed that of training
@@ -1934,7 +2312,7 @@ int predict_values(const struct model *model_, const struct feature_node *x, dou
 			for(i=0;i<nr_w;i++)
 				dec_values[i] += w[(idx-1)*nr_w+i]*lx->value;
 	}
-
+#endif
 	if(nr_class==2)
 		return (dec_values[0]>0)?model_->label[0]:model_->label[1];
 	else
@@ -1949,15 +2327,23 @@ int predict_values(const struct model *model_, const struct feature_node *x, dou
 	}
 }
 
+#ifdef _DENSE_REP
+int predict(const model *model_, const double *x)
+#else
 int predict(const model *model_, const feature_node *x)
+#endif
+
 {
 	double *dec_values = Malloc(double, model_->nr_class);
 	int label=predict_values(model_, x, dec_values);
 	free(dec_values);
 	return label;
 }
-
+#ifdef _DENSE_REP
+int predict_probability(const struct model *model_, const double *x,double* prob_estimates)
+#else
 int predict_probability(const struct model *model_, const struct feature_node *x, double* prob_estimates)
+#endif
 {
 	if(model_->param.solver_type==L2R_LR)
 	{
@@ -2045,7 +2431,12 @@ void cross_validation(const problem *prob, const parameter *param, int nr_fold, 
 		subprob.bias = prob->bias;
 		subprob.n = prob->n;
 		subprob.l = l-(end-begin);
+
+#ifdef _DENSE_REP
+		subprob.x = Malloc(double *,subprob.l);
+#else
 		subprob.x = Malloc(struct feature_node*,subprob.l);
+#endif
 		subprob.y = Malloc(int,subprob.l);
 
 		k=0;

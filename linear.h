@@ -5,6 +5,18 @@
 extern "C" {
 #endif
 
+#ifdef _DENSE_REP
+
+struct problem
+{
+  int l,n;
+  int *y;
+  double **x;
+  double bias;
+};
+
+#else
+
 struct feature_node
 {
 	int index;
@@ -18,6 +30,7 @@ struct problem
 	struct feature_node **x;
 	double bias;            /* < 0 if no bias term */  
 };
+#endif /* _DENSE_REP */
 
 enum { L2R_LR, L2R_L2LOSS_SVC_DUAL, L2R_L2LOSS_SVC, L2R_L1LOSS_SVC_DUAL, MCSVM_CS, L1R_L2LOSS_SVC, L1R_LR }; /* solver_type */
 
@@ -46,9 +59,15 @@ struct model
 struct model* train(const struct problem *prob, const struct parameter *param);
 void cross_validation(const struct problem *prob, const struct parameter *param, int nr_fold, int *target);
 
+#ifdef _DENSE_REP
+int predict_values(const struct model *model_, const double *x, double* dec_values);
+int predict(const struct model *model_, const double *x);
+int predict_probability(const struct model *model_, const double *x, double* prob_estimates);
+#else
 int predict_values(const struct model *model_, const struct feature_node *x, double* dec_values);
 int predict(const struct model *model_, const struct feature_node *x);
 int predict_probability(const struct model *model_, const struct feature_node *x, double* prob_estimates);
+#endif
 
 int save_model(const char *model_file_name, const struct model *model_);
 struct model *load_model(const char *model_file_name);

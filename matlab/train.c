@@ -24,6 +24,9 @@ void exit_with_help()
 {
 	mexPrintf(
 	"Usage: model = train(training_label_vector, training_instance_matrix, 'liblinear_options', 'col');\n"
+#ifdef _DENSE_REP
+	" ( warning : training_instance_matrix must be dense )\n"
+#endif
 	"liblinear_options:\n"
 	"-s type : set type of solver (default 1)\n"
 	"	0 -- L2-regularized logistic regression\n"
@@ -56,7 +59,13 @@ void exit_with_help()
 struct parameter param;		// set by parse_command_line
 struct problem prob;		// set by read_problem
 struct model *model_;
+
+#ifdef _DENSE_REP
+double *x_space;
+#else
 struct feature_node *x_space;
+#endif
+
 int cross_validation_flag;
 int col_format_flag;
 int nr_fold;
@@ -190,9 +199,13 @@ static void fake_answer(mxArray *plhs[])
 
 int read_problem_sparse(const mxArray *label_vec, const mxArray *instance_mat)
 {
-	int i, j, k, low, high;
+	int i, j;
+#ifdef _DENSE_REP
+#else
+	int  k, low, high;
 	mwIndex *ir, *jc;
-	int elements, max_index, num_samples, label_vector_row_num;
+#endif
+	int elements, max_index, label_vector_row_num;
 	double *samples, *labels;
 	mxArray *instance_mat_col; // instance sparse matrix in column format
 
@@ -229,10 +242,43 @@ int read_problem_sparse(const mxArray *label_vec, const mxArray *instance_mat)
 	// each column is one instance
 	labels = mxGetPr(label_vec);
 	samples = mxGetPr(instance_mat_col);
+
+#ifdef _DENSE_REP
+	max_index = (int) mxGetM(instance_mat_col);
+
+	if(bias >= 0)	  
+	  elements = (max_index + 1)*label_vector_row_num; // with the bias
+	else
+	  elements = max_index*label_vector_row_num; // with the bias
+
+	//mexPrintf("elements : %i, max_index : %i \n", elements, max_index); 
+	prob.y = Malloc(int, prob.l);
+	prob.x = Malloc(double *, prob.l);
+	x_space = Malloc(double, elements);
+	prob.bias = bias;
+
+	int x_space_idx = 0, sample_idx  = 0;
+
+	for(i=0;i<prob.l;i++)
+        {
+	        prob.x[i] = &x_space[x_space_idx];
+		prob.y[i] = (int)labels[i];
+		
+		for(j=0;j<max_index;j++)
+		{
+	               x_space[x_space_idx++] = samples[sample_idx++];
+		}
+		if(prob.bias >= 0)
+		{
+                       x_space[x_space_idx++] = prob.bias;
+		}
+	}
+
+#else
 	ir = mxGetIr(instance_mat_col);
 	jc = mxGetJc(instance_mat_col);
 
-	num_samples = (int) mxGetNzmax(instance_mat_col);
+	int num_samples = (int) mxGetNzmax(instance_mat_col);
 
 	elements = num_samples + prob.l*2;
 	max_index = (int) mxGetM(instance_mat_col);
@@ -263,7 +309,7 @@ int read_problem_sparse(const mxArray *label_vec, const mxArray *instance_mat)
 		}
 		x_space[j++].index = -1;
 	}
-
+#endif
 	if(prob.bias>=0)
 		prob.n = max_index+1;
 	else
@@ -300,7 +346,17 @@ void mexFunction( int nlhs, mxArray *plhs[],
 			fake_answer(plhs);
 			return;
 		}
-
+#ifdef _DENSE_REP
+		if(!mxIsSparse(prhs[1]))
+			err = read_problem_sparse(prhs[0], prhs[1]);
+		else
+		{
+			mexPrintf("Training_instance_matrix must be dense\n");
+			destroy_param(&param);
+			fake_answer(plhs);
+			return;
+		}
+#else
 		if(mxIsSparse(prhs[1]))
 			err = read_problem_sparse(prhs[0], prhs[1]);
 		else
@@ -310,6 +366,7 @@ void mexFunction( int nlhs, mxArray *plhs[],
 			fake_answer(plhs);
 			return;
 		}
+#endif
 
 		// train's original code
 		error_msg = check_parameter(&prob, &param);
@@ -336,7 +393,6 @@ void mexFunction( int nlhs, mxArray *plhs[],
 		else
 		{
 			const char *error_msg;
-
 			model_ = train(&prob, &param);
 			error_msg = model_to_matlab_structure(plhs, model_);
 			if(error_msg)

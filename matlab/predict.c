@@ -16,11 +16,26 @@ typedef int mwIndex;
 
 int col_format_flag;
 
+#ifdef _DENSE_REP
+void read_sparse_instance(const mxArray *prhs, int index, double *x, int feature_number, double bias)
+#else
 void read_sparse_instance(const mxArray *prhs, int index, struct feature_node *x, int feature_number, double bias)
+#endif
 {
-	int i, j, low, high;
-	mwIndex *ir, *jc;
+	int i, low;
 	double *samples;
+
+#ifdef _DENSE_REP
+	samples = mxGetPr(prhs);
+	low = feature_number*index ;
+	for(i=0; i < feature_number ; i++)
+	  x[i] = samples[low + i];
+
+	if(bias >= 0)
+	  x[feature_number] = bias;
+#else
+	int j, high;
+	mwIndex *ir, *jc;
 
 	ir = mxGetIr(prhs);
 	jc = mxGetJc(prhs);
@@ -42,6 +57,7 @@ void read_sparse_instance(const mxArray *prhs, int index, struct feature_node *x
 		j++;
 	}
 	x[j].index = -1;
+#endif
 }
 
 static void fake_answer(mxArray *plhs[])
@@ -58,7 +74,13 @@ void do_predict(mxArray *plhs[], const mxArray *prhs[], struct model *model_, co
 	int instance_index;
 	double *ptr_instance, *ptr_label, *ptr_predict_label;
 	double *ptr_prob_estimates, *ptr_dec_values, *ptr;
+
+#if _DENSE_REP
+	double *x;
+#else
 	struct feature_node *x;
+#endif
+
 	mxArray *pplhs[1]; // instance sparse matrix in row format
 
 	int correct = 0;
@@ -102,6 +124,28 @@ void do_predict(mxArray *plhs[], const mxArray *prhs[], struct model *model_, co
 	ptr_label    = mxGetPr(prhs[0]);
 
 	// transpose instance matrix
+#ifdef _DENSE_REP
+	if(!mxIsSparse(prhs[1]))
+	{
+		if(col_format_flag)
+		{
+			pplhs[0] = (mxArray *)prhs[1];
+		}
+		else
+		{
+			mxArray *pprhs[1];
+			pprhs[0] = mxDuplicateArray(prhs[1]);
+			if(mexCallMATLAB(1, pplhs, 1, pprhs, "transpose"))
+			{
+				mexPrintf("Error: cannot transpose testing instance matrix\n");
+				fake_answer(plhs);
+				return;
+			}
+		}
+	}
+	else
+		mexPrintf("Testing_instance_matrix must be dense\n");
+#else
 	if(mxIsSparse(prhs[1]))
 	{
 		if(col_format_flag)
@@ -123,7 +167,7 @@ void do_predict(mxArray *plhs[], const mxArray *prhs[], struct model *model_, co
 	else
 		mexPrintf("Testing_instance_matrix must be sparse\n");
 
-
+#endif
 	prob_estimates = Malloc(double, nr_class);
 
 	plhs[0] = mxCreateDoubleMatrix(testing_instance_number, 1, mxREAL);
@@ -135,7 +179,12 @@ void do_predict(mxArray *plhs[], const mxArray *prhs[], struct model *model_, co
 	ptr_predict_label = mxGetPr(plhs[0]);
 	ptr_prob_estimates = mxGetPr(plhs[2]);
 	ptr_dec_values = mxGetPr(plhs[2]);
+
+#ifdef _DENSE_REP
+	x = Malloc(double, feature_number+1);
+#else
 	x = Malloc(struct feature_node, feature_number+2);
+#endif
 	for(instance_index=0;instance_index<testing_instance_number;instance_index++)
 	{
 		int i;
@@ -278,7 +327,15 @@ void mexFunction( int nlhs, mxArray *plhs[],
 				prob_estimate_flag=0;
 			}
 		}
-
+#ifdef _DENSE_REP
+		if(!mxIsSparse(prhs[1]))
+			do_predict(plhs, prhs, model_, prob_estimate_flag);
+		else
+		{
+			mexPrintf("Testing_instance_matrix must be dense\n");
+			fake_answer(plhs);
+		}
+#else
 		if(mxIsSparse(prhs[1]))
 			do_predict(plhs, prhs, model_, prob_estimate_flag);
 		else
@@ -286,7 +343,7 @@ void mexFunction( int nlhs, mxArray *plhs[],
 			mexPrintf("Testing_instance_matrix must be sparse\n");
 			fake_answer(plhs);
 		}
-
+#endif
 		// destroy model_
 		destroy_model(model_);
 	}
