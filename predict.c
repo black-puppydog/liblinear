@@ -5,7 +5,9 @@
 #include <errno.h>
 #include "linear.h"
 
+#ifndef _DENSE_REP
 struct feature_node *x;
+#endif
 int max_nr_attr = 64;
 
 struct model* model_;
@@ -41,11 +43,13 @@ static char* readline(FILE *input)
 void do_predict(FILE *input, FILE *output, struct model* model_)
 {
 	int correct = 0;
-	int total = 0;
+	int total;
 
 	int nr_class=get_nr_class(model_);
 	double *prob_estimates=NULL;
-	int j, n;
+	double *x;
+	int *y;
+	int j, n, i, nr_f_check;
 	int nr_feature=get_nr_feature(model_);
 	if(model_->bias>=0)
 		n=nr_feature+1;
@@ -71,58 +75,26 @@ void do_predict(FILE *input, FILE *output, struct model* model_)
 		fprintf(output,"\n");
 		free(labels);
 	}
+	
+	fread((void*)(&total), sizeof(total), 1, input);
+	fread((void*)(&nr_f_check), sizeof(nr_f_check), 1, input);
+	if(nr_f_check!=n)
+	  exit_input_error(2);
+	x = (double*)malloc(n*sizeof(double));
+	
+	y = (int*)malloc(total*sizeof(int));
+	fread((void*)(y), sizeof(y[0]), total, input);
 
-	max_line_len = 1024;
-	line = (char *)malloc(max_line_len*sizeof(char));
-	while(readline(input) != NULL)
+	for(i=0; i<total; i++)
 	{
-		int i = 0;
 		int target_label, predict_label;
-		char *idx, *val, *label, *endptr;
-		int inst_max_index = 0; // strtol gives 0 if wrong format
 
-		label = strtok(line," \t");
-		target_label = (int) strtol(label,&endptr,10);
-		if(endptr == label)
-			exit_input_error(total+1);
-
-		while(1)
-		{
-			if(i>=max_nr_attr-2)	// need one more for index = -1
-			{
-				max_nr_attr *= 2;
-				x = (struct feature_node *) realloc(x,max_nr_attr*sizeof(struct feature_node));
-			}
-
-			idx = strtok(NULL,":");
-			val = strtok(NULL," \t");
-
-			if(val == NULL)
-				break;
-			errno = 0;
-			x[i].index = (int) strtol(idx,&endptr,10);
-			if(endptr == idx || errno != 0 || *endptr != '\0' || x[i].index <= inst_max_index)
-				exit_input_error(total+1);
-			else
-				inst_max_index = x[i].index;
-
-			errno = 0;
-			x[i].value = strtod(val,&endptr);
-			if(endptr == val || errno != 0 || (*endptr != '\0' && !isspace(*endptr)))
-				exit_input_error(total+1);
-
-			// feature indices larger than those in training are not used
-			if(x[i].index <= nr_feature)
-				++i;
-		}
-
+		target_label = y[i];	
+		fread((void*)x, sizeof(double), nr_feature, input);
+		
+		
 		if(model_->bias>=0)
-		{
-			x[i].index = n;
-			x[i].value = model_->bias;
-			i++;
-		}
-		x[i].index = -1;
+			x[n-1] = model_->bias;
 
 		if(flag_predict_probability)
 		{
@@ -141,9 +113,8 @@ void do_predict(FILE *input, FILE *output, struct model* model_)
 
 		if(predict_label == target_label)
 			++correct;
-		++total;
 	}
-	printf("Accuracy = %g%% (%d/%d)\n",(double) correct/total*100,correct,total);
+	//printf("Accuracy = %g%% (%d/%d)\n",(double) correct/total*100,correct,total);
 	if(flag_predict_probability)
 		free(prob_estimates);
 }
@@ -203,11 +174,15 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
+#ifndef _DENSE_REP
 	x = (struct feature_node *) malloc(max_nr_attr*sizeof(struct feature_node));
+#endif
 	do_predict(input, output, model_);
 	destroy_model(model_);
 	free(line);
+#ifndef _DENSE_REP
 	free(x);
+#endif
 	fclose(input);
 	fclose(output);
 	return 0;

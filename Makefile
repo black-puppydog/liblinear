@@ -1,6 +1,6 @@
 CXX ?= g++
 CC ?= gcc
-CFLAGS = -Wall -Wconversion -O3 -fPIC
+CFLAGS = -Wall -Wconversion -O3 -fPIC -D_DENSE_REP
 LIBS = blas/blas.a
 #LIBS = -lblas
 
